@@ -1,0 +1,16 @@
+package ht.uep.edupro_uep.audit;
+
+public enum AuditAction {
+    LOGIN_SUCCESS,
+    LOGIN_FAILURE,
+    ACCOUNT_LOCKED,
+    LOGIN_DISABLED_ATTEMPT,
+    REFRESH_TOKEN_INVALID,
+    LOGOUT,
+    USER_CREATED,
+    USER_UPDATED,
+    ROLE_CHANGED,
+    STATUS_CHANGED,
+    PASSWORD_RESET,
+    USER_DELETED,
+}
