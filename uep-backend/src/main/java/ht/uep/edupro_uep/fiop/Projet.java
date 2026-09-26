@@ -77,6 +77,14 @@ public class Projet {
     @Column(name = "cout_total_gourde")
     private BigDecimal coutTotalGourde;
 
+    /** § 36 de la FIOP : "Numéro du compte bancaire en Gourde". */
+    @Column(name = "numero_compte_bancaire")
+    private String numeroCompteBancaire;
+
+    /** § 37 de la FIOP : "Type d'investissement" (Etude / Exécution / Evaluation). */
+    @Column(name = "type_investissement")
+    private String typeInvestissement;
+
     @Column(columnDefinition = "text")
     private String justification;
 
@@ -183,6 +191,22 @@ public class Projet {
 
     public void setCoutTotalGourde(BigDecimal coutTotalGourde) {
         this.coutTotalGourde = coutTotalGourde;
+    }
+
+    public String getNumeroCompteBancaire() {
+        return numeroCompteBancaire;
+    }
+
+    public void setNumeroCompteBancaire(String numeroCompteBancaire) {
+        this.numeroCompteBancaire = numeroCompteBancaire;
+    }
+
+    public String getTypeInvestissement() {
+        return typeInvestissement;
+    }
+
+    public void setTypeInvestissement(String typeInvestissement) {
+        this.typeInvestissement = typeInvestissement;
     }
 
     public String getJustification() {

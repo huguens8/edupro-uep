@@ -21,6 +21,7 @@ public class BilanResponse {
     private List<BilanActiviteLigneDto> activites;
     private List<BilanRubriqueLigneDto> rubriques;
     private List<BilanSourceLigneDto> sources;
+    private List<BilanPipLigneDto> pipAnnuel;
 
     private LocalDateTime dateCreation;
 
@@ -126,6 +127,14 @@ public class BilanResponse {
 
     public void setSources(List<BilanSourceLigneDto> sources) {
         this.sources = sources;
+    }
+
+    public List<BilanPipLigneDto> getPipAnnuel() {
+        return pipAnnuel;
+    }
+
+    public void setPipAnnuel(List<BilanPipLigneDto> pipAnnuel) {
+        this.pipAnnuel = pipAnnuel;
     }
 
     public LocalDateTime getDateCreation() {

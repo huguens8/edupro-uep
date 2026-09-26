@@ -15,6 +15,8 @@ public class FiopRequest {
 
     private Integer dureeTotaleMois;
     private BigDecimal coutTotalGourde;
+    private String numeroCompteBancaire;
+    private String typeInvestissement;
     private String nomChargeProjet;
     private String telephoneChargeProjet;
 
@@ -83,6 +85,7 @@ public class FiopRequest {
     private List<RubriqueCalendrierLigneDto> calendrierRubriques;
     private List<CoutRecurrentLigneDto> coutsRecurrents;
     private List<SourceFinancementPlanLigneDto> sourcesFinancement;
+    private List<PipAnnuelPlanLigneDto> pipAnnuel;
 
     public String getTitre() {
         return titre;
@@ -106,6 +109,22 @@ public class FiopRequest {
 
     public void setCoutTotalGourde(BigDecimal coutTotalGourde) {
         this.coutTotalGourde = coutTotalGourde;
+    }
+
+    public String getNumeroCompteBancaire() {
+        return numeroCompteBancaire;
+    }
+
+    public void setNumeroCompteBancaire(String numeroCompteBancaire) {
+        this.numeroCompteBancaire = numeroCompteBancaire;
+    }
+
+    public String getTypeInvestissement() {
+        return typeInvestissement;
+    }
+
+    public void setTypeInvestissement(String typeInvestissement) {
+        this.typeInvestissement = typeInvestissement;
     }
 
     public String getNomChargeProjet() {
@@ -450,5 +469,13 @@ public class FiopRequest {
 
     public void setSourcesFinancement(List<SourceFinancementPlanLigneDto> sourcesFinancement) {
         this.sourcesFinancement = sourcesFinancement;
+    }
+
+    public List<PipAnnuelPlanLigneDto> getPipAnnuel() {
+        return pipAnnuel;
+    }
+
+    public void setPipAnnuel(List<PipAnnuelPlanLigneDto> pipAnnuel) {
+        this.pipAnnuel = pipAnnuel;
     }
 }

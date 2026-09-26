@@ -1,6 +1,8 @@
 package ht.uep.edupro_uep.user;
 
+import java.security.SecureRandom;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.NoSuchElementException;
 
@@ -10,6 +12,7 @@ import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authentication.LockedException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import ht.uep.edupro_uep.audit.AuditAction;
 import ht.uep.edupro_uep.audit.AuditLogService;
@@ -17,17 +20,24 @@ import ht.uep.edupro_uep.dto.CreateUserRequest;
 import ht.uep.edupro_uep.dto.LoginResponse;
 import ht.uep.edupro_uep.dto.UpdateUserRequest;
 import ht.uep.edupro_uep.dto.UserResponse;
+import ht.uep.edupro_uep.mail.AccountMailService;
 import ht.uep.edupro_uep.security.JwtService;
+import ht.uep.edupro_uep.security.RefreshTokenRepository;
 import ht.uep.edupro_uep.security.RefreshTokenService;
 
 @Service
 public class UserService {
 
+    private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("dd/MM/yyyy à HH:mm");
+    private static final SecureRandom RANDOM = new SecureRandom();
+
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
+    private final RefreshTokenRepository refreshTokenRepository;
     private final AuditLogService auditLogService;
+    private final AccountMailService accountMailService;
     private final int maxFailedAttempts;
     private final long lockoutMinutes;
 
@@ -36,14 +46,18 @@ public class UserService {
             PasswordEncoder passwordEncoder,
             JwtService jwtService,
             RefreshTokenService refreshTokenService,
+            RefreshTokenRepository refreshTokenRepository,
             AuditLogService auditLogService,
+            AccountMailService accountMailService,
             @Value("${app.auth.max-failed-attempts}") int maxFailedAttempts,
             @Value("${app.auth.lockout-minutes}") long lockoutMinutes) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.refreshTokenService = refreshTokenService;
+        this.refreshTokenRepository = refreshTokenRepository;
         this.auditLogService = auditLogService;
+        this.accountMailService = accountMailService;
         this.maxFailedAttempts = maxFailedAttempts;
         this.lockoutMinutes = lockoutMinutes;
     }
@@ -94,18 +108,23 @@ public class UserService {
         userRepository.save(user);
         auditLogService.log(user.getUsername(), AuditAction.LOGIN_SUCCESS, "User", user.getId(), null);
 
-        String accessToken = jwtService.generateToken(user.getUsername(), user.getRole().name());
-        String rawRefreshToken = refreshTokenService.issue(user);
-        LoginResponse response = new LoginResponse(
-                accessToken, user.getUsername(), user.getRole().name(), user.getRole().getLibelle());
-        return new LoginResult(response, rawRefreshToken);
+        return new LoginResult(toLoginResponse(user), refreshTokenService.issue(user));
     }
 
-    /** Génère un nouvel access token pour un utilisateur déjà authentifié (utilisé par /api/auth/refresh). */
-    public String generateAccessToken(User user) {
-        return jwtService.generateToken(user.getUsername(), user.getRole().name());
+    /** Réponse de connexion (access token + identité) pour un utilisateur authentifié ; utilisée aussi par /api/auth/refresh. */
+    public LoginResponse toLoginResponse(User user) {
+        String accessToken = jwtService.generateToken(
+                user.getUsername(), user.getRole().name(), user.isPasswordChangeRequired());
+        return new LoginResponse(accessToken, user.getUsername(), user.getRole().name(),
+                user.getRole().getLibelle(), user.isPasswordChangeRequired());
     }
 
+    /**
+     * Seul l'administrateur crée les comptes. Le mot de passe n'est pas saisi : un mot de
+     * passe temporaire est généré et envoyé par e-mail au titulaire, qui devra le changer
+     * à sa première connexion. Si l'e-mail ne part pas, la création est annulée.
+     */
+    @Transactional
     public UserResponse createUser(CreateUserRequest request, String currentUsername) {
         if (userRepository.existsByUsername(request.getUsername())) {
             throw new IllegalStateException("Ce nom d'utilisateur existe déjà.");
@@ -114,15 +133,55 @@ public class UserService {
             throw new IllegalStateException("Cet email est déjà utilisé.");
         }
 
+        String temporaryPassword = generateTemporaryPassword();
         User user = new User(
                 request.getUsername(),
-                passwordEncoder.encode(request.getPassword()),
+                passwordEncoder.encode(temporaryPassword),
                 request.getEmail(),
                 request.getRole());
+        user.setPasswordChangeRequired(true);
         userRepository.save(user);
+        accountMailService.sendAccountCreated(user, temporaryPassword);
         auditLogService.log(currentUsername, AuditAction.USER_CREATED, "User", user.getId(),
-                "Rôle : " + user.getRole().name());
+                "Rôle : " + user.getRole().name() + " ; identifiants envoyés à " + user.getEmail());
         return toResponse(user);
+    }
+
+    /**
+     * Changement de mot de passe par l'utilisateur connecté (obligatoire après la création
+     * du compte). Les autres sessions sont fermées ; une nouvelle session est ouverte.
+     */
+    @Transactional
+    public LoginResult changePassword(String username, String currentPassword, String newPassword) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new NoSuchElementException("Utilisateur introuvable."));
+
+        if (!passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
+            throw new IllegalStateException("Le mot de passe actuel est incorrect.");
+        }
+        if (passwordEncoder.matches(newPassword, user.getPasswordHash())) {
+            throw new IllegalStateException("Le nouveau mot de passe doit être différent de l'actuel.");
+        }
+
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        user.setPasswordChangeRequired(false);
+        userRepository.save(user);
+        refreshTokenRepository.deleteByUser(user);
+        auditLogService.log(user.getUsername(), AuditAction.PASSWORD_CHANGED, "User", user.getId(), null);
+        return new LoginResult(toLoginResponse(user), refreshTokenService.issue(user));
+    }
+
+    /** 12 caractères sans ambiguïté visuelle (pas de 0/O, 1/l/I), avec au moins un chiffre. */
+    private String generateTemporaryPassword() {
+        String letters = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz";
+        String digits = "23456789";
+        String all = letters + digits;
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < 11; i++) {
+            sb.append(all.charAt(RANDOM.nextInt(all.length())));
+        }
+        sb.insert(RANDOM.nextInt(sb.length() + 1), digits.charAt(RANDOM.nextInt(digits.length())));
+        return sb.toString();
     }
 
     public List<UserResponse> listUsers() {
@@ -186,14 +245,7 @@ public class UserService {
         return toResponse(user);
     }
 
-    public UserResponse resetPassword(Integer id, String newPassword, String currentUsername) {
-        User user = findUserOrThrow(id);
-        user.setPasswordHash(passwordEncoder.encode(newPassword));
-        userRepository.save(user);
-        auditLogService.log(currentUsername, AuditAction.PASSWORD_RESET, "User", user.getId(), null);
-        return toResponse(user);
-    }
-
+    @Transactional
     public void deleteUser(Integer id, String currentUsername) {
         User user = findUserOrThrow(id);
 
@@ -204,9 +256,15 @@ public class UserService {
             throw new IllegalStateException(
                     "Impossible de supprimer ce compte : il doit rester au moins un administrateur actif.");
         }
+        String blockedReason = deletionBlockedReason(user);
+        if (blockedReason != null) {
+            throw new IllegalStateException(blockedReason);
+        }
 
         auditLogService.log(currentUsername, AuditAction.USER_DELETED, "User", user.getId(),
                 user.getUsername() + " (" + user.getEmail() + ")");
+        // Les sessions (refresh tokens) référencent le compte : on les supprime d'abord.
+        refreshTokenRepository.deleteByUser(user);
         userRepository.delete(user);
     }
 
@@ -221,6 +279,23 @@ public class UserService {
                 .count();
     }
 
+    /**
+     * Raison pour laquelle le compte ne peut pas être supprimé (null s'il peut l'être).
+     * Seul un compte jamais utilisé est supprimable : les autres se désactivent, pour garder la traçabilité.
+     */
+    private String deletionBlockedReason(User user) {
+        if (user.getDateDerniereConnexion() != null) {
+            return "Ce compte a déjà été utilisé (dernière connexion le "
+                    + user.getDateDerniereConnexion().format(DATE_FORMAT)
+                    + ") : le supprimer effacerait la trace de son activité. Désactivez-le plutôt.";
+        }
+        if (userRepository.isReferencedByProjets(user.getId())) {
+            return "Ce compte est l'auteur de projets ou de documents archivés : le supprimer ferait perdre "
+                    + "la traçabilité de ces projets. Désactivez-le plutôt.";
+        }
+        return null;
+    }
+
     private UserResponse toResponse(User user) {
         return new UserResponse(
                 user.getId(),
@@ -228,6 +303,7 @@ public class UserService {
                 user.getEmail(),
                 user.getRole().name(),
                 user.getRole().getLibelle(),
-                user.isActive());
+                user.isActive(),
+                deletionBlockedReason(user));
     }
 }

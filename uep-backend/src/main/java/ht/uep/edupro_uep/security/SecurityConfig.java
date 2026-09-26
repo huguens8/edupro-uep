@@ -51,6 +51,9 @@ public class SecurityConfig {
                         .accessDeniedHandler(accessDeniedHandler))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll()
+                        // Page d'erreur interne de Spring : sans ceci, une erreur 500 était
+                        // transformée en 401 "session expirée" par le point d'entrée d'authentification.
+                        .requestMatchers("/error").permitAll()
                         // Seul l'administrateur peut gérer les comptes et consulter le journal d'audit.
                         .requestMatchers("/api/users/**").hasRole("ADMINISTRATEUR")
                         .requestMatchers("/api/audit-logs/**").hasRole("ADMINISTRATEUR")

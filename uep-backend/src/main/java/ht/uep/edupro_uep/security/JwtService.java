@@ -28,13 +28,17 @@ public class JwtService {
         this.expirationMs = expirationMs;
     }
 
-    /** Crée un token dont le sujet est le username et qui porte le rôle en claim. */
-    public String generateToken(String username, String role) {
+    /**
+     * Crée un token dont le sujet est le username et qui porte le rôle en claim.
+     * {@code passwordChangeRequired} restreint le token au seul changement de mot de passe.
+     */
+    public String generateToken(String username, String role, boolean passwordChangeRequired) {
         Date now = new Date();
         Date expiry = new Date(now.getTime() + expirationMs);
         return Jwts.builder()
                 .subject(username)
                 .claim("role", role)
+                .claim("pwdChange", passwordChangeRequired)
                 .issuedAt(now)
                 .expiration(expiry)
                 .signWith(key)
@@ -47,6 +51,10 @@ public class JwtService {
 
     public String extractRole(String token) {
         return parse(token).get("role", String.class);
+    }
+
+    public boolean isPasswordChangeRequired(String token) {
+        return Boolean.TRUE.equals(parse(token).get("pwdChange", Boolean.class));
     }
 
     /** Retourne les claims si le token est valide, lève une exception sinon. */

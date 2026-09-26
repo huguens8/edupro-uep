@@ -8,6 +8,8 @@ import java.util.NoSuchElementException;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,6 +26,7 @@ import ht.uep.edupro_uep.dto.FiopResponse;
 import ht.uep.edupro_uep.dto.IntervenantDto;
 import ht.uep.edupro_uep.dto.IntrantBudgetPhaseLigneDto;
 import ht.uep.edupro_uep.dto.PhaseActuelleLigneDto;
+import ht.uep.edupro_uep.dto.PipAnnuelPlanLigneDto;
 import ht.uep.edupro_uep.dto.RubriqueCalendrierLigneDto;
 import ht.uep.edupro_uep.dto.SourceFinancementPlanLigneDto;
 import ht.uep.edupro_uep.geo.ArrondissementRepository;
@@ -84,6 +87,7 @@ public class ProjetService {
     private final RubriqueBudgetaireRepository rubriqueBudgetaireRepository;
     private final SourceFinancementRepository sourceFinancementRepository;
     private final PhaseActuelleProjetRepository phaseActuelleProjetRepository;
+    private final ProjetPipAnnuelRepository pipAnnuelRepository;
 
     public ProjetService(
             ProjetRepository projetRepository,
@@ -114,7 +118,8 @@ public class ProjetService {
             ProjetFinancementRepository projetFinancementRepository,
             RubriqueBudgetaireRepository rubriqueBudgetaireRepository,
             SourceFinancementRepository sourceFinancementRepository,
-            PhaseActuelleProjetRepository phaseActuelleProjetRepository) {
+            PhaseActuelleProjetRepository phaseActuelleProjetRepository,
+            ProjetPipAnnuelRepository pipAnnuelRepository) {
         this.projetRepository = projetRepository;
         this.userRepository = userRepository;
         this.departementRepository = departementRepository;
@@ -144,6 +149,7 @@ public class ProjetService {
         this.rubriqueBudgetaireRepository = rubriqueBudgetaireRepository;
         this.sourceFinancementRepository = sourceFinancementRepository;
         this.phaseActuelleProjetRepository = phaseActuelleProjetRepository;
+        this.pipAnnuelRepository = pipAnnuelRepository;
     }
 
     @Transactional
@@ -174,20 +180,25 @@ public class ProjetService {
      * Brouillon. Le Superviseur UEP, qui contrôle le travail des Opérateurs,
      * peut aussi le modifier une fois soumis à son niveau (pas besoin de
      * rejeter pour une simple correction avant transmission au MPCE).
+     *
+     * Pendant une correction (Rejeté UEP / Rejeté MPCE), le wizard enregistre
+     * chaque étape par ici sans changer le statut ; seule la dernière étape
+     * passe par {@link #corrigerFiop} pour resoumettre.
      */
     @Transactional
     public FiopResponse modifierFiop(Integer id, FiopRequest request, String username) {
         Projet projet = findProjetOrThrow(id);
         User user = findUserOrThrow(username);
 
-        if (projet.getStatut() == StatutFiop.BROUILLON) {
-            requireCreateur(projet, user);
-        } else if (projet.getStatut() == StatutFiop.SOUMIS_SUPERVISEUR_UEP) {
-            if (user.getRole() != Role.SUPERVISEUR_UEP) {
-                throw new IllegalStateException("Seul le Superviseur UEP peut modifier un FIOP à ce stade.");
+        switch (projet.getStatut()) {
+            case BROUILLON, REJETE_UEP -> requireCreateur(projet, user);
+            case SOUMIS_SUPERVISEUR_UEP, REJETE_MPCE -> {
+                if (user.getRole() != Role.SUPERVISEUR_UEP) {
+                    throw new IllegalStateException("Seul le Superviseur UEP peut modifier un FIOP à ce stade.");
+                }
             }
-        } else {
-            throw new IllegalStateException("Cette action n'est possible qu'à l'état Brouillon ou Soumis (UEP).");
+            default -> throw new IllegalStateException(
+                    "Cette action n'est possible qu'à l'état Brouillon, Soumis (UEP) ou en correction.");
         }
 
         applyRequest(projet, request);
@@ -244,6 +255,11 @@ public class ProjetService {
         }
 
         projet.setStatut(StatutFiop.VALIDE_ACTIF);
+        // L'approbation MPCE inscrit le projet au PIP : le code est généré ici
+        // (jamais saisi) et reste immuable ensuite.
+        if (projet.getCodeInternePip() == null) {
+            projet.setCodeInternePip(genererCodePip(projet));
+        }
         projet.setIdUtilisateurDerniereMaj(user.getId());
         projetRepository.save(projet);
         return toResponse(projet);
@@ -256,18 +272,18 @@ public class ProjetService {
         StatutFiop nouveauStatut = switch (projet.getStatut()) {
             case SOUMIS_SUPERVISEUR_UEP -> {
                 if (user.getRole() != Role.SUPERVISEUR_UEP) {
-                    throw new IllegalStateException("Seul le Superviseur UEP peut rejeter un FIOP à ce stade.");
+                    throw new IllegalStateException("Seul le Superviseur UEP peut retourner un FIOP à ce stade.");
                 }
                 yield StatutFiop.REJETE_UEP;
             }
             case SOUMIS_MPCE -> {
                 if (user.getRole() != Role.SUPERVISEUR_MPCE) {
-                    throw new IllegalStateException("Seul le Superviseur MPCE peut rejeter un FIOP à ce stade.");
+                    throw new IllegalStateException("Seul le Superviseur MPCE peut retourner un FIOP à ce stade.");
                 }
                 yield StatutFiop.REJETE_MPCE;
             }
             default -> throw new IllegalStateException(
-                    "Seul un FIOP Soumis (niveau UEP ou MPCE) peut être rejeté.");
+                    "Seul un FIOP Soumis (niveau UEP ou MPCE) peut être retourné.");
         };
 
         projet.setStatut(nouveauStatut);
@@ -289,7 +305,7 @@ public class ProjetService {
             }
             case REJETE_MPCE -> {
                 if (user.getRole() != Role.SUPERVISEUR_UEP) {
-                    throw new IllegalStateException("Seul le Superviseur UEP peut corriger un rejet du MPCE.");
+                    throw new IllegalStateException("Seul le Superviseur UEP peut corriger un retour du MPCE.");
                 }
                 yield StatutFiop.SOUMIS_MPCE;
             }
@@ -306,24 +322,24 @@ public class ProjetService {
     }
 
     /**
-     * "Créer le PIP" = attribuer le code interne PIP au projet une fois actif.
-     * Le code est immuable une fois attribué (aucune suppression possible).
+     * Code PIP = "PIP-<année d'approbation>-<id projet sur 4 chiffres>".
+     * L'id garantit l'unicité (contrainte UNIQUE sur code_interne_pip).
      */
-    public FiopResponse assignerCodePip(Integer id, String codeInternePip, String username) {
-        Projet projet = findProjetOrThrow(id);
-        User user = findUserOrThrow(username);
+    private String genererCodePip(Projet projet) {
+        return String.format("PIP-%d-%04d", LocalDate.now().getYear(), projet.getId());
+    }
 
-        if (projet.getStatut() != StatutFiop.VALIDE_ACTIF) {
-            throw new IllegalStateException("Le code PIP ne peut être attribué qu'à un projet Actif.");
+    /**
+     * Rattrapage au démarrage : les projets approuvés avant la génération
+     * automatique (code alors saisi à la main par le MPCE) peuvent ne pas en avoir.
+     */
+    @EventListener(ApplicationReadyEvent.class)
+    @Transactional
+    public void genererCodesPipManquants() {
+        for (Projet projet : projetRepository.findByStatutAndCodeInternePipIsNull(StatutFiop.VALIDE_ACTIF)) {
+            projet.setCodeInternePip(genererCodePip(projet));
+            projetRepository.save(projet);
         }
-        if (projet.getCodeInternePip() != null) {
-            throw new IllegalStateException("Le code PIP a déjà été attribué et ne peut plus être modifié.");
-        }
-
-        projet.setCodeInternePip(codeInternePip);
-        projet.setIdUtilisateurDerniereMaj(user.getId());
-        projetRepository.save(projet);
-        return toResponse(projet);
     }
 
     public List<FiopResponse> listFiops() {
@@ -360,6 +376,8 @@ public class ProjetService {
         projet.setTitre(request.getTitre());
         projet.setDureeTotaleMois(request.getDureeTotaleMois());
         projet.setCoutTotalGourde(request.getCoutTotalGourde());
+        projet.setNumeroCompteBancaire(request.getNumeroCompteBancaire());
+        projet.setTypeInvestissement(request.getTypeInvestissement());
         projet.setNomChargeProjet(request.getNomChargeProjet());
         projet.setTelephoneChargeProjet(request.getTelephoneChargeProjet());
         projet.setCourrielChargeProjet(request.getCourrielChargeProjet());
@@ -473,6 +491,28 @@ public class ProjetService {
         applyCoutsRecurrents(projetId, request.getCoutsRecurrents());
         applySourcesFinancement(projetId, request.getSourcesFinancement());
         applyPhasesActuelles(projetId, request);
+        applyPipAnnuel(projetId, request.getPipAnnuel());
+    }
+
+    /** § 38 de la FIOP : "Programme d'Investissement Public" — 5 lignes fixes (une par année). */
+    private void applyPipAnnuel(Integer projetId, List<PipAnnuelPlanLigneDto> lignes) {
+        pipAnnuelRepository.deleteByIdProjet(projetId);
+        if (lignes == null) {
+            return;
+        }
+        short annee = 1;
+        for (PipAnnuelPlanLigneDto ligne : lignes) {
+            if (ligne != null && ligne.getIdExercice() != null) {
+                ProjetPipAnnuel p = new ProjetPipAnnuel();
+                p.setIdProjet(projetId);
+                p.setAnneeNumero(annee);
+                p.setIdExercice(ligne.getIdExercice());
+                p.setBudgetPrevisionnel(ligne.getBudgetPrevisionnel());
+                p.setBudgetAlloue(ligne.getBudgetAlloue());
+                pipAnnuelRepository.save(p);
+            }
+            annee++;
+        }
     }
 
     /**
@@ -507,7 +547,11 @@ public class ProjetService {
                 activiteRepository.save(activite);
                 idsConserves.add(activite.getId());
 
+                // flush() immédiat : sans lui, Hibernate exécute les INSERT de saveAnneeActivite
+                // ci-dessous avant ce DELETE (ordre de flush par type d'action, indépendant de
+                // l'ordre d'appel), ce qui viole la contrainte unique (id_activite, annee_numero).
                 activitePlanificationAnnuelleRepository.deleteByIdActivite(activite.getId());
+                activitePlanificationAnnuelleRepository.flush();
                 saveAnneeActivite(activite.getId(), (short) 1, ligne.getCoutAnnee1(), ligne.getDureeAnnee1());
                 saveAnneeActivite(activite.getId(), (short) 2, ligne.getCoutAnnee2(), ligne.getDureeAnnee2());
                 saveAnneeActivite(activite.getId(), (short) 3, ligne.getCoutAnnee3(), ligne.getDureeAnnee3());
@@ -738,6 +782,8 @@ public class ProjetService {
         r.setDateInscription(projet.getDateInscription());
         r.setDureeTotaleMois(projet.getDureeTotaleMois());
         r.setCoutTotalGourde(projet.getCoutTotalGourde());
+        r.setNumeroCompteBancaire(projet.getNumeroCompteBancaire());
+        r.setTypeInvestissement(projet.getTypeInvestissement());
         r.setNomChargeProjet(projet.getNomChargeProjet());
         r.setTelephoneChargeProjet(projet.getTelephoneChargeProjet());
         r.setCourrielChargeProjet(projet.getCourrielChargeProjet());
@@ -819,6 +865,7 @@ public class ProjetService {
         r.setCalendrierRubriques(buildCalendrierRubriquesResponse(projet.getId()));
         r.setCoutsRecurrents(buildCoutsRecurrentsResponse(projet.getId()));
         r.setSourcesFinancement(buildSourcesFinancementResponse(projet.getId()));
+        r.setPipAnnuel(buildPipAnnuelResponse(projet.getId()));
 
         r.setStatut(projet.getStatut().name());
         r.setMotifRejet(projet.getMotifRejet());
@@ -910,6 +957,18 @@ public class ProjetService {
                     dto.getMontantAnnee3(), dto.getMontantAnnee4(), dto.getMontantAnnee5()));
         }
         return new java.util.ArrayList<>(parRubrique.values());
+    }
+
+    private List<PipAnnuelPlanLigneDto> buildPipAnnuelResponse(Integer projetId) {
+        return pipAnnuelRepository.findByIdProjetOrderByAnneeNumeroAsc(projetId).stream().map(p -> {
+            PipAnnuelPlanLigneDto dto = new PipAnnuelPlanLigneDto();
+            dto.setAnneeNumero(p.getAnneeNumero());
+            dto.setIdExercice(p.getIdExercice());
+            exerciceBudgetaireRepository.findById(p.getIdExercice()).ifPresent(e -> dto.setExerciceLibelle(e.getLibelle()));
+            dto.setBudgetPrevisionnel(p.getBudgetPrevisionnel());
+            dto.setBudgetAlloue(p.getBudgetAlloue());
+            return dto;
+        }).toList();
     }
 
     private List<CoutRecurrentLigneDto> buildCoutsRecurrentsResponse(Integer projetId) {

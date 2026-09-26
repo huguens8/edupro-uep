@@ -8,7 +8,6 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -16,7 +15,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-import ht.uep.edupro_uep.dto.AssignCodePipRequest;
 import ht.uep.edupro_uep.dto.FiopRequest;
 import ht.uep.edupro_uep.dto.FiopResponse;
 import ht.uep.edupro_uep.dto.RejectRequest;
@@ -44,13 +42,13 @@ public class ProjetController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasRole('OPERATEUR_SAISIE')")
+    @PreAuthorize("hasRole('Porteur_PROJET')")
     public FiopResponse creer(@Valid @RequestBody FiopRequest request, Authentication authentication) {
         return projetService.creerFiop(request, authentication.getName());
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('OPERATEUR_SAISIE', 'SUPERVISEUR_UEP')")
+    @PreAuthorize("hasAnyRole('Porteur_PROJET', 'SUPERVISEUR_UEP')")
     public FiopResponse modifier(@PathVariable Integer id, @Valid @RequestBody FiopRequest request,
             Authentication authentication) {
         return projetService.modifierFiop(id, request, authentication.getName());
@@ -58,13 +56,13 @@ public class ProjetController {
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @PreAuthorize("hasRole('OPERATEUR_SAISIE')")
+    @PreAuthorize("hasRole('Porteur_PROJET')")
     public void supprimer(@PathVariable Integer id, Authentication authentication) {
         projetService.supprimerFiop(id, authentication.getName());
     }
 
     @PostMapping("/{id}/soumettre")
-    @PreAuthorize("hasRole('OPERATEUR_SAISIE')")
+    @PreAuthorize("hasRole('Porteur_PROJET')")
     public FiopResponse soumettre(@PathVariable Integer id, Authentication authentication) {
         return projetService.soumettreFiop(id, authentication.getName());
     }
@@ -89,16 +87,9 @@ public class ProjetController {
     }
 
     @PutMapping("/{id}/corriger")
-    @PreAuthorize("hasAnyRole('OPERATEUR_SAISIE', 'SUPERVISEUR_UEP')")
+    @PreAuthorize("hasAnyRole('Porteur_PROJET', 'SUPERVISEUR_UEP')")
     public FiopResponse corriger(@PathVariable Integer id, @Valid @RequestBody FiopRequest request,
             Authentication authentication) {
         return projetService.corrigerFiop(id, request, authentication.getName());
-    }
-
-    @PatchMapping("/{id}/code-pip")
-    @PreAuthorize("hasRole('SUPERVISEUR_MPCE')")
-    public FiopResponse assignerCodePip(@PathVariable Integer id, @Valid @RequestBody AssignCodePipRequest request,
-            Authentication authentication) {
-        return projetService.assignerCodePip(id, request.getCodeInternePip(), authentication.getName());
     }
 }

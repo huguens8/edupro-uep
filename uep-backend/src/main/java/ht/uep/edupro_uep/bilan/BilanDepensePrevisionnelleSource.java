@@ -33,6 +33,18 @@ public class BilanDepensePrevisionnelleSource {
     @Column(name = "poids_pct")
     private BigDecimal poidsPct;
 
+    @Column(name = "total_decaissements_effectifs")
+    private BigDecimal totalDecaissementsEffectifs;
+
+    @Column(name = "balance_previsionnelle")
+    private BigDecimal balancePrevisionnelle;
+
+    @Column(name = "total_depenses_effectives")
+    private BigDecimal totalDepensesEffectives;
+
+    @Column(name = "valeur_aux_livres_comptables")
+    private BigDecimal valeurAuxLivresComptables;
+
     public Integer getId() {
         return id;
     }
@@ -67,5 +79,37 @@ public class BilanDepensePrevisionnelleSource {
 
     public void setPoidsPct(BigDecimal poidsPct) {
         this.poidsPct = poidsPct;
+    }
+
+    public BigDecimal getTotalDecaissementsEffectifs() {
+        return totalDecaissementsEffectifs;
+    }
+
+    public void setTotalDecaissementsEffectifs(BigDecimal totalDecaissementsEffectifs) {
+        this.totalDecaissementsEffectifs = totalDecaissementsEffectifs;
+    }
+
+    public BigDecimal getBalancePrevisionnelle() {
+        return balancePrevisionnelle;
+    }
+
+    public void setBalancePrevisionnelle(BigDecimal balancePrevisionnelle) {
+        this.balancePrevisionnelle = balancePrevisionnelle;
+    }
+
+    public BigDecimal getTotalDepensesEffectives() {
+        return totalDepensesEffectives;
+    }
+
+    public void setTotalDepensesEffectives(BigDecimal totalDepensesEffectives) {
+        this.totalDepensesEffectives = totalDepensesEffectives;
+    }
+
+    public BigDecimal getValeurAuxLivresComptables() {
+        return valeurAuxLivresComptables;
+    }
+
+    public void setValeurAuxLivresComptables(BigDecimal valeurAuxLivresComptables) {
+        this.valeurAuxLivresComptables = valeurAuxLivresComptables;
     }
 }

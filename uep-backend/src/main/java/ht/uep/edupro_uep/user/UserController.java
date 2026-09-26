@@ -16,7 +16,6 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import ht.uep.edupro_uep.dto.CreateUserRequest;
-import ht.uep.edupro_uep.dto.ResetPasswordRequest;
 import ht.uep.edupro_uep.dto.UpdateRoleRequest;
 import ht.uep.edupro_uep.dto.UpdateStatusRequest;
 import ht.uep.edupro_uep.dto.UpdateUserRequest;
@@ -69,14 +68,6 @@ public class UserController {
             @Valid @RequestBody UpdateUserRequest request,
             Authentication authentication) {
         return userService.updateUser(id, request, authentication.getName());
-    }
-
-    @PatchMapping("/{id}/password")
-    public UserResponse resetPassword(
-            @PathVariable Integer id,
-            @Valid @RequestBody ResetPasswordRequest request,
-            Authentication authentication) {
-        return userService.resetPassword(id, request.getPassword(), authentication.getName());
     }
 
     @DeleteMapping("/{id}")

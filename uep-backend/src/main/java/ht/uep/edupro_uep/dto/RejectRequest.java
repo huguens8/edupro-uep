@@ -4,7 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 
 public class RejectRequest {
 
-    @NotBlank(message = "Le motif de rejet est obligatoire.")
+    @NotBlank(message = "Le motif du retour est obligatoire.")
     private String motif;
 
     public String getMotif() {

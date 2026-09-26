@@ -9,9 +9,10 @@ package ht.uep.edupro_uep.user;
  */
 public enum Role {
     ADMINISTRATEUR("Administrateur", "Administrateur"),
-    OPERATEUR_SAISIE("Opérateur_Saisie", "Opérateur de saisie"),
+    Porteur_PROJET("Porteur_PROJET", "Porteur de Projet"),
     SUPERVISEUR_UEP("Superviseur_UEP", "Superviseur UEP"),
-    SUPERVISEUR_MPCE("Superviseur_MPCE", "Superviseur MPCE");
+    SUPERVISEUR_MPCE("Superviseur_MPCE", "Superviseur MPCE"),
+    VISITEUR("Visiteur", "Visiteur");
 
     private final String dbValue;
     private final String libelle;

@@ -7,6 +7,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import ht.uep.edupro_uep.audit.AuditAction;
 import ht.uep.edupro_uep.audit.AuditLogService;
+import ht.uep.edupro_uep.dto.ChangePasswordRequest;
 import ht.uep.edupro_uep.dto.LoginRequest;
 import ht.uep.edupro_uep.dto.LoginResponse;
 import ht.uep.edupro_uep.security.RefreshTokenService;
@@ -72,8 +74,23 @@ public class AuthController {
 
         setRefreshCookie(response, rotated.rawToken());
         User user = rotated.user();
-        String accessToken = userService.generateAccessToken(user);
-        return new LoginResponse(accessToken, user.getUsername(), user.getRole().name(), user.getRole().getLibelle());
+        return userService.toLoginResponse(user);
+    }
+
+    /**
+     * Changement du mot de passe par l'utilisateur connecté. Seule route métier accessible
+     * avec un mot de passe temporaire (voir JwtAuthFilter) ; ouvre une nouvelle session.
+     */
+    @PostMapping("/change-password")
+    public LoginResponse changePassword(@Valid @RequestBody ChangePasswordRequest request,
+            Authentication authentication, HttpServletResponse response) {
+        if (authentication == null) {
+            throw new BadCredentialsException("Session invalide ou expirée.");
+        }
+        UserService.LoginResult result = userService.changePassword(
+                authentication.getName(), request.getCurrentPassword(), request.getNewPassword());
+        setRefreshCookie(response, result.rawRefreshToken());
+        return result.loginResponse();
     }
 
     @PostMapping("/logout")

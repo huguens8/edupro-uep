@@ -28,33 +28,33 @@ public class BilanController {
     }
 
     @GetMapping("/api/fiop/{projetId}/bilans")
-    @PreAuthorize("hasAnyRole('OPERATEUR_SAISIE', 'SUPERVISEUR_UEP', 'SUPERVISEUR_MPCE')")
+    @PreAuthorize("hasAnyRole('Porteur_PROJET', 'SUPERVISEUR_UEP', 'SUPERVISEUR_MPCE')")
     public List<BilanResponse> lister(@PathVariable Integer projetId) {
         return bilanService.listerBilans(projetId);
     }
 
     @GetMapping("/api/bilans/{id}")
-    @PreAuthorize("hasAnyRole('OPERATEUR_SAISIE', 'SUPERVISEUR_UEP', 'SUPERVISEUR_MPCE')")
+    @PreAuthorize("hasAnyRole('Porteur_PROJET', 'SUPERVISEUR_UEP', 'SUPERVISEUR_MPCE')")
     public BilanResponse get(@PathVariable Integer id) {
         return bilanService.getBilan(id);
     }
 
     @PostMapping("/api/fiop/{projetId}/bilans")
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasAnyRole('OPERATEUR_SAISIE', 'SUPERVISEUR_UEP')")
+    @PreAuthorize("hasAnyRole('Porteur_PROJET', 'SUPERVISEUR_UEP')")
     public BilanResponse creer(@PathVariable Integer projetId, @Valid @RequestBody BilanRequest request) {
         return bilanService.creerBilan(projetId, request);
     }
 
     @PutMapping("/api/bilans/{id}")
-    @PreAuthorize("hasAnyRole('OPERATEUR_SAISIE', 'SUPERVISEUR_UEP')")
+    @PreAuthorize("hasAnyRole('Porteur_PROJET', 'SUPERVISEUR_UEP')")
     public BilanResponse modifier(@PathVariable Integer id, @Valid @RequestBody BilanRequest request) {
         return bilanService.modifierBilan(id, request);
     }
 
     @DeleteMapping("/api/bilans/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @PreAuthorize("hasAnyRole('OPERATEUR_SAISIE', 'SUPERVISEUR_UEP')")
+    @PreAuthorize("hasAnyRole('Porteur_PROJET', 'SUPERVISEUR_UEP')")
     public void supprimer(@PathVariable Integer id) {
         bilanService.supprimerBilan(id);
     }

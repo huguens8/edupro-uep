@@ -19,6 +19,12 @@ public class BilanRequest {
     /** Saisie d'exécution par rubrique du calendrier budgétaire projet (§ 41) ; idem. */
     private List<BilanRubriqueExecutionRequest> rubriques;
 
+    /** Saisie d'exécution par source de financement du plan projet (§ 39) ; idem. */
+    private List<BilanSourceExecutionRequest> sources;
+
+    /** Programme d'Investissement Public (§ 38), saisi entièrement ici (voir {@link BilanPipExecutionRequest}). */
+    private List<BilanPipExecutionRequest> pipAnnuel;
+
     public Integer getIdExercice() {
         return idExercice;
     }
@@ -57,5 +63,21 @@ public class BilanRequest {
 
     public void setRubriques(List<BilanRubriqueExecutionRequest> rubriques) {
         this.rubriques = rubriques;
+    }
+
+    public List<BilanSourceExecutionRequest> getSources() {
+        return sources;
+    }
+
+    public void setSources(List<BilanSourceExecutionRequest> sources) {
+        this.sources = sources;
+    }
+
+    public List<BilanPipExecutionRequest> getPipAnnuel() {
+        return pipAnnuel;
+    }
+
+    public void setPipAnnuel(List<BilanPipExecutionRequest> pipAnnuel) {
+        this.pipAnnuel = pipAnnuel;
     }
 }

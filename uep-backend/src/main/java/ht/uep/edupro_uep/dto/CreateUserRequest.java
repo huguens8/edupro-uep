@@ -16,9 +16,6 @@ public class CreateUserRequest {
     @Email(message = "L'email n'est pas valide.")
     private String email;
 
-    @NotBlank(message = "Le mot de passe est obligatoire.")
-    @Size(min = 6, message = "Le mot de passe doit contenir au moins 6 caractères.")
-    private String password;
 
     @NotNull(message = "Le rôle est obligatoire.")
     private Role role;
@@ -39,13 +36,6 @@ public class CreateUserRequest {
         this.email = email;
     }
 
-    public String getPassword() {
-        return password;
-    }
-
-    public void setPassword(String password) {
-        this.password = password;
-    }
 
     public Role getRole() {
         return role;

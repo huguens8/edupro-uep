@@ -51,6 +51,12 @@ public class User {
     @Column(name = "verrouille_jusqu_a")
     private LocalDateTime lockedUntil;
 
+    // Vrai tant que l'utilisateur n'a pas remplacé le mot de passe temporaire
+    // reçu par e-mail : il ne peut alors rien faire d'autre que le changer.
+    @ColumnDefault("false")
+    @Column(name = "doit_changer_mot_de_passe", nullable = false)
+    private boolean passwordChangeRequired = false;
+
     public User() {
     }
 
@@ -136,5 +142,13 @@ public class User {
 
     public void setLockedUntil(LocalDateTime lockedUntil) {
         this.lockedUntil = lockedUntil;
+    }
+
+    public boolean isPasswordChangeRequired() {
+        return passwordChangeRequired;
+    }
+
+    public void setPasswordChangeRequired(boolean passwordChangeRequired) {
+        this.passwordChangeRequired = passwordChangeRequired;
     }
 }

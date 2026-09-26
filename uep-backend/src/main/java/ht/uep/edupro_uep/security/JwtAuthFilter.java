@@ -5,6 +5,7 @@ import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -37,11 +38,13 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             FilterChain filterChain) throws ServletException, IOException {
 
         String header = request.getHeader("Authorization");
+        boolean passwordChangeRequired = false;
         if (header != null && header.startsWith("Bearer ")) {
             String token = header.substring(7);
             try {
                 String username = jwtService.extractUsername(token);
                 String role = jwtService.extractRole(token);
+                passwordChangeRequired = jwtService.isPasswordChangeRequired(token);
                 if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                     var authority = new SimpleGrantedAuthority("ROLE_" + role);
                     var authentication = new UsernamePasswordAuthenticationToken(
@@ -53,7 +56,19 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 // Token invalide ou expiré : on laisse la requête non authentifiée.
                 log.debug("JWT invalide : {}", ex.getMessage());
                 SecurityContextHolder.clearContext();
+                passwordChangeRequired = false;
             }
+        }
+
+        // Mot de passe temporaire pas encore changé : seules les routes /api/auth/**
+        // (dont /api/auth/change-password et /api/auth/logout) restent accessibles.
+        if (passwordChangeRequired && !request.getRequestURI().startsWith("/api/auth/")) {
+            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+            response.setCharacterEncoding("UTF-8");
+            response.getWriter().write("{\"code\":\"PASSWORD_CHANGE_REQUIRED\","
+                    + "\"message\":\"Vous devez changer votre mot de passe temporaire avant de continuer.\"}");
+            return;
         }
 
         filterChain.doFilter(request, response);

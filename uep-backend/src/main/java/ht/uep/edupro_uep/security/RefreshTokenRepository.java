@@ -7,6 +7,8 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import ht.uep.edupro_uep.user.User;
+
 public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Integer> {
 
     Optional<RefreshToken> findByTokenHash(String tokenHash);
@@ -23,4 +25,8 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Inte
     @Query("update RefreshToken rt set rt.revoked = true, rt.revokedAt = CURRENT_TIMESTAMP "
             + "where rt.tokenHash = :hash and rt.revoked = false and rt.expiresAt > CURRENT_TIMESTAMP")
     int revokeIfValid(@Param("hash") String hash);
+
+    @Modifying
+    @Query("delete from RefreshToken rt where rt.user = :user")
+    int deleteByUser(@Param("user") User user);
 }

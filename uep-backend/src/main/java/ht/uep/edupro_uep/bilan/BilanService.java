@@ -15,10 +15,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import ht.uep.edupro_uep.dto.BilanActiviteExecutionRequest;
 import ht.uep.edupro_uep.dto.BilanActiviteLigneDto;
+import ht.uep.edupro_uep.dto.BilanPipExecutionRequest;
+import ht.uep.edupro_uep.dto.BilanPipLigneDto;
 import ht.uep.edupro_uep.dto.BilanRequest;
 import ht.uep.edupro_uep.dto.BilanResponse;
 import ht.uep.edupro_uep.dto.BilanRubriqueExecutionRequest;
 import ht.uep.edupro_uep.dto.BilanRubriqueLigneDto;
+import ht.uep.edupro_uep.dto.BilanSourceExecutionRequest;
 import ht.uep.edupro_uep.dto.BilanSourceLigneDto;
 import ht.uep.edupro_uep.fiop.Projet;
 import ht.uep.edupro_uep.fiop.ProjetCalendrierDepenseAnnuelle;
@@ -28,15 +31,18 @@ import ht.uep.edupro_uep.fiop.ProjetFinancementRepository;
 import ht.uep.edupro_uep.fiop.ProjetRepository;
 import ht.uep.edupro_uep.reference.ExerciceBudgetaireRepository;
 import ht.uep.edupro_uep.reference.RubriqueBudgetaireRepository;
+import ht.uep.edupro_uep.reference.SourceFinancement;
 import ht.uep.edupro_uep.reference.SourceFinancementRepository;
 
 /**
- * Bilan d'Exécution (DEUXIEME PARTIE DE LA FIOP : "Bilan Physique et Financier du Projet", §§ 35
- * et 39/41-43 du canevas FIOP). Le "prévu" (activités, budget par rubrique, sources de
- * financement) est TOUJOURS lu depuis le plan du projet (PREMIERE PARTIE de la FIOP, §§ 29/31/33/34,
- * géré par {@code ProjetService}) — jamais ressaisi ici, exactement comme dans le classeur Excel
- * d'origine (ex. {@code Bilan Suite 2!E15 = 'Info Générales'!L178}). Seule la partie exécution
- * (résultats obtenus, dépenses de l'exercice) est saisie dans ce module.
+ * Bilan d'Exécution (DEUXIEME PARTIE DE LA FIOP : "Bilan Physique et Financier du Projet", §§ 35,
+ * 38-41 et 42-43 du canevas FIOP). Le "prévu" des activités, du budget par rubrique et des
+ * sources de financement est TOUJOURS lu depuis le plan du projet (PREMIERE PARTIE de la FIOP,
+ * §§ 29/31/33/34, géré par {@code ProjetService}) — jamais ressaisi ici, exactement comme dans le
+ * classeur Excel d'origine (ex. {@code Bilan Suite 2!E15 = 'Info Générales'!L178}). Seule la
+ * partie exécution (résultats obtenus, dépenses de l'exercice) est saisie dans ce module pour ces
+ * sections. Le Programme d'Investissement Public (§ 38) fait exception : comme sur la feuille
+ * "Bilan d'Exécution" du canevas, il est saisi entièrement ici (prévisionnel, alloué et réel).
  */
 @Service
 public class BilanService {
@@ -46,6 +52,7 @@ public class BilanService {
     private final BilanAvancementFinancierRepository avancementFinancierRepository;
     private final BilanAvancementBudgetNationalRepository avancementBudgetRepository;
     private final BilanDepensePrevisionnelleSourceRepository depensePrevisionnelleRepository;
+    private final BilanPipAnnuelRepository bilanPipAnnuelRepository;
     private final ActiviteRepository activiteRepository;
     private final ActivitePlanificationAnnuelleRepository activitePlanificationAnnuelleRepository;
     private final ProjetRepository projetRepository;
@@ -61,6 +68,7 @@ public class BilanService {
             BilanAvancementFinancierRepository avancementFinancierRepository,
             BilanAvancementBudgetNationalRepository avancementBudgetRepository,
             BilanDepensePrevisionnelleSourceRepository depensePrevisionnelleRepository,
+            BilanPipAnnuelRepository bilanPipAnnuelRepository,
             ActiviteRepository activiteRepository,
             ActivitePlanificationAnnuelleRepository activitePlanificationAnnuelleRepository,
             ProjetRepository projetRepository,
@@ -74,6 +82,7 @@ public class BilanService {
         this.avancementFinancierRepository = avancementFinancierRepository;
         this.avancementBudgetRepository = avancementBudgetRepository;
         this.depensePrevisionnelleRepository = depensePrevisionnelleRepository;
+        this.bilanPipAnnuelRepository = bilanPipAnnuelRepository;
         this.activiteRepository = activiteRepository;
         this.activitePlanificationAnnuelleRepository = activitePlanificationAnnuelleRepository;
         this.projetRepository = projetRepository;
@@ -130,6 +139,11 @@ public class BilanService {
         avancementFinancierRepository.deleteByIdBilan(id);
         avancementBudgetRepository.deleteByIdBilan(id);
         depensePrevisionnelleRepository.deleteByIdBilan(id);
+        bilanPipAnnuelRepository.deleteByIdBilan(id);
+        // flush() immédiat : au flush, Hibernate exécute les INSERT avant les DELETE (quel que soit
+        // l'ordre d'appel). Sans lui, les nouvelles lignes violent les contraintes uniques
+        // (id_bilan, id_activite) / (id_bilan, id_rubrique) des lignes pas encore supprimées.
+        bilanExerciceRepository.flush();
 
         applyHeader(bilan, request, projet);
         bilanExerciceRepository.save(bilan);
@@ -146,6 +160,7 @@ public class BilanService {
         avancementFinancierRepository.deleteByIdBilan(id);
         avancementBudgetRepository.deleteByIdBilan(id);
         depensePrevisionnelleRepository.deleteByIdBilan(id);
+        bilanPipAnnuelRepository.deleteByIdBilan(id);
         bilanExerciceRepository.delete(bilan);
     }
 
@@ -252,23 +267,64 @@ public class BilanService {
             avancementBudgetRepository.save(budget);
         }
 
-        // Sources de financement : entièrement dérivées du plan de financement du projet (§ 29),
-        // aucune saisie d'exécution attendue (voir le commentaire de classe).
-        List<ProjetFinancement> financements = projetFinancementRepository.findByIdProjet(idProjet);
-        BigDecimal totalPrevisions = financements.stream()
-                .map(f -> nvl(f.getPrevisionTotal()))
+        // Sources de financement (§ 39) : la prévision vient du plan de financement du projet
+        // (§ 29, jamais ressaisie) ; décaissements et dépenses effectives sont saisis ici.
+        Map<Integer, BilanSourceExecutionRequest> executionParSource = new HashMap<>();
+        if (request.getSources() != null) {
+            for (BilanSourceExecutionRequest exec : request.getSources()) {
+                if (exec != null && exec.getIdSource() != null) {
+                    executionParSource.put(exec.getIdSource(), exec);
+                }
+            }
+        }
+
+        // Le tableau § 39 du canevas liste toujours les 7 sources de référence : une source absente
+        // du plan du projet garde une prévision à 0, mais ses décaissements/dépenses restent saisissables.
+        Map<Integer, BigDecimal> previsionParSource = new HashMap<>();
+        for (ProjetFinancement financement : projetFinancementRepository.findByIdProjet(idProjet)) {
+            previsionParSource.put(financement.getIdSource(), nvl(financement.getPrevisionTotal()));
+        }
+        BigDecimal totalPrevisions = previsionParSource.values().stream()
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-        for (ProjetFinancement financement : financements) {
+        for (SourceFinancement reference : sourceFinancementRepository.findAll()) {
+            Integer idSource = reference.getId();
+            BilanSourceExecutionRequest exec = executionParSource.get(idSource);
+            BigDecimal previsionTotal = previsionParSource.getOrDefault(idSource, BigDecimal.ZERO);
+            BigDecimal decaissements = exec != null ? nvl(exec.getTotalDecaissementsEffectifs()) : BigDecimal.ZERO;
+            BigDecimal depensesEffectives = exec != null ? nvl(exec.getTotalDepensesEffectives()) : BigDecimal.ZERO;
+
             BilanDepensePrevisionnelleSource source = new BilanDepensePrevisionnelleSource();
             source.setIdBilan(idBilan);
-            source.setIdSource(financement.getIdSource());
-            BigDecimal previsionTotal = nvl(financement.getPrevisionTotal());
+            source.setIdSource(idSource);
             source.setPrevisionTotal(previsionTotal);
             if (totalPrevisions.compareTo(BigDecimal.ZERO) > 0) {
                 source.setPoidsPct(previsionTotal.divide(totalPrevisions, 4, RoundingMode.HALF_UP)
                         .multiply(BigDecimal.valueOf(100)).setScale(2, RoundingMode.HALF_UP));
             }
+            source.setTotalDecaissementsEffectifs(decaissements);
+            source.setBalancePrevisionnelle(previsionTotal.subtract(decaissements));
+            source.setTotalDepensesEffectives(depensesEffectives);
+            source.setValeurAuxLivresComptables(decaissements.subtract(depensesEffectives));
             depensePrevisionnelleRepository.save(source);
+        }
+
+        // § 38 : Programme d'Investissement Public — saisi entièrement dans le Bilan d'Exécution
+        // (année, exercice, prévisionnel, alloué, réel), comme dans la feuille "Bilan d'Exécution"
+        // du canevas.
+        if (request.getPipAnnuel() != null) {
+            for (BilanPipExecutionRequest exec : request.getPipAnnuel()) {
+                if (exec == null || exec.getIdExercice() == null) {
+                    continue;
+                }
+                BilanPipAnnuel pip = new BilanPipAnnuel();
+                pip.setIdBilan(idBilan);
+                pip.setIdExercice(exec.getIdExercice());
+                pip.setAnneeNumero(exec.getAnneeNumero());
+                pip.setBudgetPrevisionnel(exec.getBudgetPrevisionnel());
+                pip.setBudgetAlloue(exec.getBudgetAlloue());
+                pip.setBudgetReel(exec.getBudgetReel());
+                bilanPipAnnuelRepository.save(pip);
+            }
         }
     }
 
@@ -328,6 +384,11 @@ public class BilanService {
                 .map(this::toSourceLigne)
                 .toList());
 
+        r.setPipAnnuel(bilanPipAnnuelRepository.findByIdBilan(bilan.getId()).stream()
+                .sorted(Comparator.comparing(BilanPipAnnuel::getAnneeNumero, Comparator.nullsLast(Comparator.naturalOrder())))
+                .map(this::toPipLigne)
+                .toList());
+
         return r;
     }
 
@@ -368,9 +429,48 @@ public class BilanService {
     private BilanSourceLigneDto toSourceLigne(BilanDepensePrevisionnelleSource source) {
         BilanSourceLigneDto dto = new BilanSourceLigneDto();
         dto.setIdSource(source.getIdSource());
-        sourceFinancementRepository.findById(source.getIdSource()).ifPresent(s -> dto.setSourceLibelle(s.getLibelle()));
+        sourceFinancementRepository.findById(source.getIdSource()).ifPresent(s -> {
+            dto.setSourceLibelle(s.getLibelle());
+            dto.setSourceCategorie(s.getCategorie());
+        });
         dto.setPrevisionTotal(source.getPrevisionTotal());
         dto.setPoidsPct(source.getPoidsPct());
+        dto.setTotalDecaissementsEffectifs(source.getTotalDecaissementsEffectifs());
+        dto.setBalancePrevisionnelle(source.getBalancePrevisionnelle());
+        dto.setTotalDepensesEffectives(source.getTotalDepensesEffectives());
+        dto.setValeurAuxLivresComptables(source.getValeurAuxLivresComptables());
+
+        // § 40 : taux de financement (5/4) et taux d'absorption (7/5), calculés à la lecture.
+        BigDecimal prevision = nvl(source.getPrevisionTotal());
+        BigDecimal decaissements = nvl(source.getTotalDecaissementsEffectifs());
+        BigDecimal depensesEffectives = nvl(source.getTotalDepensesEffectives());
+        if (prevision.compareTo(BigDecimal.ZERO) > 0) {
+            dto.setTauxFinancementPct(decaissements.divide(prevision, 4, RoundingMode.HALF_UP)
+                    .multiply(BigDecimal.valueOf(100)).setScale(2, RoundingMode.HALF_UP));
+        }
+        if (decaissements.compareTo(BigDecimal.ZERO) > 0) {
+            dto.setTauxAbsorptionPct(depensesEffectives.divide(decaissements, 4, RoundingMode.HALF_UP)
+                    .multiply(BigDecimal.valueOf(100)).setScale(2, RoundingMode.HALF_UP));
+        }
+        return dto;
+    }
+
+    private BilanPipLigneDto toPipLigne(BilanPipAnnuel pip) {
+        BilanPipLigneDto dto = new BilanPipLigneDto();
+        dto.setAnneeNumero(pip.getAnneeNumero());
+        dto.setIdExercice(pip.getIdExercice());
+        if (pip.getIdExercice() != null) {
+            exerciceBudgetaireRepository.findById(pip.getIdExercice()).ifPresent(e -> dto.setExerciceLibelle(e.getLibelle()));
+        }
+        dto.setBudgetPrevisionnel(pip.getBudgetPrevisionnel());
+        dto.setBudgetAlloue(pip.getBudgetAlloue());
+        dto.setBudgetReel(pip.getBudgetReel());
+        BigDecimal previsionnel = nvl(pip.getBudgetPrevisionnel());
+        BigDecimal alloue = nvl(pip.getBudgetAlloue());
+        dto.setEcartPrevisionnel(previsionnel.subtract(alloue));
+        if (pip.getBudgetReel() != null) {
+            dto.setEcartExecution(alloue.subtract(pip.getBudgetReel()));
+        }
         return dto;
     }
 
