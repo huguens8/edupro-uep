@@ -30,12 +30,15 @@ public class ProjetController {
         this.projetService = projetService;
     }
 
+    // Lecture réservée aux rôles métier : le visiteur n'a accès qu'aux indicateurs agrégés du tableau de bord.
     @GetMapping
+    @PreAuthorize("hasAnyRole('Porteur_PROJET', 'SUPERVISEUR_UEP', 'SUPERVISEUR_MPCE')")
     public List<FiopResponse> list() {
         return projetService.listFiops();
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('Porteur_PROJET', 'SUPERVISEUR_UEP', 'SUPERVISEUR_MPCE')")
     public FiopResponse get(@PathVariable Integer id) {
         return projetService.getFiop(id);
     }

@@ -66,3 +66,9 @@ CREATE TABLE IF NOT EXISTS projet_cout_recurrent (
 );
 
 CREATE INDEX IF NOT EXISTS idx_projet_cout_recurrent_id_projet ON projet_cout_recurrent(id_projet);
+
+-- Rôle Visiteur (enum Role.VISITEUR) : compte créé par l'administrateur, limité à la consultation
+-- du tableau de bord. Sans cette valeur, la contrainte refusait la création d'un tel compte.
+ALTER TABLE utilisateur DROP CONSTRAINT IF EXISTS utilisateur_role_check;
+ALTER TABLE utilisateur ADD CONSTRAINT utilisateur_role_check
+    CHECK (role IN ('Administrateur', 'Superviseur_UEP', 'Superviseur_MPCE', 'Porteur_PROJET', 'Visiteur'));
