@@ -33,6 +33,8 @@ import ht.uep.edupro_uep.geo.ArrondissementRepository;
 import ht.uep.edupro_uep.geo.CommuneRepository;
 import ht.uep.edupro_uep.geo.DepartementRepository;
 import ht.uep.edupro_uep.geo.SectionCommunaleRepository;
+import ht.uep.edupro_uep.ptf.Ptf;
+import ht.uep.edupro_uep.ptf.PtfRepository;
 import ht.uep.edupro_uep.reference.ExerciceBudgetaireRepository;
 import ht.uep.edupro_uep.reference.GrandChantierRepository;
 import ht.uep.edupro_uep.reference.ProgrammeRepository;
@@ -88,6 +90,7 @@ public class ProjetService {
     private final SourceFinancementRepository sourceFinancementRepository;
     private final PhaseActuelleProjetRepository phaseActuelleProjetRepository;
     private final ProjetPipAnnuelRepository pipAnnuelRepository;
+    private final PtfRepository ptfRepository;
 
     public ProjetService(
             ProjetRepository projetRepository,
@@ -119,7 +122,8 @@ public class ProjetService {
             RubriqueBudgetaireRepository rubriqueBudgetaireRepository,
             SourceFinancementRepository sourceFinancementRepository,
             PhaseActuelleProjetRepository phaseActuelleProjetRepository,
-            ProjetPipAnnuelRepository pipAnnuelRepository) {
+            ProjetPipAnnuelRepository pipAnnuelRepository,
+            PtfRepository ptfRepository) {
         this.projetRepository = projetRepository;
         this.userRepository = userRepository;
         this.departementRepository = departementRepository;
@@ -150,6 +154,7 @@ public class ProjetService {
         this.sourceFinancementRepository = sourceFinancementRepository;
         this.phaseActuelleProjetRepository = phaseActuelleProjetRepository;
         this.pipAnnuelRepository = pipAnnuelRepository;
+        this.ptfRepository = ptfRepository;
     }
 
     @Transactional
@@ -768,6 +773,14 @@ public class ProjetService {
         i.setIdProjet(projetId);
         i.setRole(role);
         i.setNomCharge(dto.getNomCharge());
+        // Le bailleur est un PTF enregistré : son nom est repris de la fiche PTF. Un ancien bailleur
+        // saisi en texte libre (idPtf absent) est conservé tel quel jusqu'à ce qu'il soit rattaché.
+        if ("Bailleur".equals(role) && dto.getIdPtf() != null) {
+            Ptf ptf = ptfRepository.findById(dto.getIdPtf())
+                    .orElseThrow(() -> new NoSuchElementException("Le partenaire (PTF) choisi comme bailleur est introuvable."));
+            i.setIdPtf(ptf.getId());
+            i.setNomCharge(ptf.getNom());
+        }
         i.setTelephone(dto.getTelephone());
         i.setCourriel(dto.getCourriel());
         intervenantRepository.save(i);
@@ -895,7 +908,7 @@ public class ProjetService {
         return list.stream()
                 .filter(i -> i.getRole().equals(role))
                 .max(Comparator.comparing(Intervenant::getId))
-                .map(i -> new IntervenantDto(i.getNomCharge(), i.getTelephone(), i.getCourriel()))
+                .map(i -> new IntervenantDto(i.getIdPtf(), i.getNomCharge(), i.getTelephone(), i.getCourriel()))
                 .orElse(null);
     }
 

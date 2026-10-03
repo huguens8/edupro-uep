@@ -5,6 +5,9 @@ import jakarta.validation.constraints.Email;
 
 public class IntervenantDto {
 
+    /** Renseigné pour le bailleur : le PTF choisi dans la liste des partenaires. */
+    private Integer idPtf;
+
     private String nomCharge;
     private String telephone;
 
@@ -14,10 +17,19 @@ public class IntervenantDto {
     public IntervenantDto() {
     }
 
-    public IntervenantDto(String nomCharge, String telephone, String courriel) {
+    public IntervenantDto(Integer idPtf, String nomCharge, String telephone, String courriel) {
+        this.idPtf = idPtf;
         this.nomCharge = nomCharge;
         this.telephone = telephone;
         this.courriel = courriel;
+    }
+
+    public Integer getIdPtf() {
+        return idPtf;
+    }
+
+    public void setIdPtf(Integer idPtf) {
+        this.idPtf = idPtf;
     }
 
     public String getNomCharge() {
@@ -46,7 +58,7 @@ public class IntervenantDto {
 
     @JsonIgnore
     public boolean isEmpty() {
-        return isBlank(nomCharge) && isBlank(telephone) && isBlank(courriel);
+        return idPtf == null && isBlank(nomCharge) && isBlank(telephone) && isBlank(courriel);
     }
 
     private boolean isBlank(String s) {

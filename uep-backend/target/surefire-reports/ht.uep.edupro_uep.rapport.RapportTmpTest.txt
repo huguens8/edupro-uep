@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: ht.uep.edupro_uep.rapport.RapportTmpTest
+-------------------------------------------------------------------------------
+Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 21.59 s -- in ht.uep.edupro_uep.rapport.RapportTmpTest

@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: ht.uep.edupro_uep.tranche.TrancheChronoTmpTest
+-------------------------------------------------------------------------------
+Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 12.49 s -- in ht.uep.edupro_uep.tranche.TrancheChronoTmpTest

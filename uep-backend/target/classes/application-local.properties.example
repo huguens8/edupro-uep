@@ -1,0 +1,16 @@
+# Copier ce fichier en "application-local.properties" (même dossier) et remplir.
+# application-local.properties est ignoré par git : les identifiants n'y seront jamais commités.
+# Ce fichier .example, lui, est versionné : NE JAMAIS y mettre de vrai mot de passe.
+
+# --- Envoi réel des e-mails de création de compte ---
+app.mail.enabled=true
+app.mail.from=votre.adresse@gmail.com
+app.frontend-url=http://localhost:3000
+
+# Exemple Gmail : utiliser un "mot de passe d'application" Google
+# (Compte Google > Sécurité > Validation en deux étapes > Mots de passe des applications),
+# jamais le mot de passe habituel du compte.
+spring.mail.host=smtp.gmail.com
+spring.mail.port=587
+spring.mail.username=votre.adresse@gmail.com
+spring.mail.password=MOT_DE_PASSE_APPLICATION_16_CARACTERES

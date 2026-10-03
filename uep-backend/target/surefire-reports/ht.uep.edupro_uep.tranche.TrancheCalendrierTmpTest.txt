@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: ht.uep.edupro_uep.tranche.TrancheCalendrierTmpTest
+-------------------------------------------------------------------------------
+Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 11.05 s -- in ht.uep.edupro_uep.tranche.TrancheCalendrierTmpTest

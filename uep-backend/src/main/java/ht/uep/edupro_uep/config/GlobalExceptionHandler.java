@@ -16,6 +16,10 @@ import org.springframework.security.authentication.LockedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+
+import ht.uep.edupro_uep.rapport.ParametreRapportInvalideException;
+import ht.uep.edupro_uep.storage.FichierInvalideException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -45,6 +49,22 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<Map<String, String>> handleConflict(IllegalStateException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("message", ex.getMessage()));
+    }
+
+    @ExceptionHandler(FichierInvalideException.class)
+    public ResponseEntity<Map<String, String>> handleFichierInvalide(FichierInvalideException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", ex.getMessage()));
+    }
+
+    @ExceptionHandler(ParametreRapportInvalideException.class)
+    public ResponseEntity<Map<String, String>> handleParametreRapport(ParametreRapportInvalideException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", ex.getMessage()));
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<Map<String, String>> handleFichierTropGros(MaxUploadSizeExceededException ex) {
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
+                .body(Map.of("message", "Fichier trop volumineux (20 Mo maximum)."));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
